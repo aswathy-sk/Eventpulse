@@ -4,19 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EventPulse Tracker</title>
-    <!-- PWA Manifest Inline Data URI -->
+    <!-- Web App Manifest for Full Native PWA Installation -->
     <link rel="manifest" href='data:application/manifest+json,{
       "name": "EventPulse Tracker",
       "short_name": "EventPulse",
+      "description": "Track recurring events, historical logs, notes, and monthly analytics.",
       "start_url": "./index.html",
+      "scope": "./",
       "display": "standalone",
       "background_color": "#0f172a",
       "theme_color": "#2563eb",
       "icons": [
         {
           "src": "https://cdn-icons-png.flaticon.com/512/2921/2921222.png",
+          "sizes": "192x192",
+          "type": "image/png",
+          "purpose": "any maskable"
+        },
+        {
+          "src": "https://cdn-icons-png.flaticon.com/512/2921/2921222.png",
           "sizes": "512x512",
-          "type": "image/png"
+          "type": "image/png",
+          "purpose": "any maskable"
         }
       ]
     }'>
@@ -32,6 +41,10 @@
             <h1 class="text-lg font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">EventPulse</h1>
         </div>
         <div class="flex items-center space-x-2">
+            <!-- Native PWA Install Trigger Button (Hidden by default, shown when browser allows installation) -->
+            <button id="headerInstallBtn" onclick="triggerPwaInstall()" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg shadow transition flex items-center space-x-1">
+                <span>📱 Install App</span>
+            </button>
             <button onclick="openSettingsModal()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1.5 rounded-lg border border-slate-700 transition" title="Backup & Restore">
                 ⚙️
             </button>
@@ -82,6 +95,7 @@
                 <button onclick="changeMonth(1)" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm">Next ▶</button>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
+                <p class="text-[11px] text-slate-400 mb-3 text-center">💡 Tap any date on the calendar to log an occurrence for a historical date.</p>
                 <div class="grid grid-cols-7 gap-1 text-center font-bold text-xs text-slate-400 mb-2">
                     <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
                 </div>
@@ -218,18 +232,23 @@
         </div>
     </div>
 
-    <!-- Modal: Log Occurrence with Notes -->
+    <!-- Modal: Log Occurrence -->
     <div id="logModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-5 space-y-4 shadow-2xl">
             <h3 class="text-base font-bold" id="logModalTitle">Log Occurrence</h3>
-            <input type="hidden" id="logEventId">
+            <div>
+                <label class="text-xs text-slate-400 block mb-1">Select Event</label>
+                <select id="logEventSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
+                    <!-- Loaded dynamically -->
+                </select>
+            </div>
             <div>
                 <label class="text-xs text-slate-400 block mb-1">Occurrence Date</label>
                 <input type="date" id="logDate" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
             </div>
             <div>
                 <label class="text-xs text-slate-400 block mb-1">Notes / Observations</label>
-                <textarea id="logNotes" rows="3" placeholder="Add payment reference number or notes..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500"></textarea>
+                <textarea id="logNotes" rows="3" placeholder="Add specific notes for this occurrence..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500"></textarea>
             </div>
             <div class="flex space-x-3 pt-3">
                 <button onclick="closeLogModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-xl text-xs font-semibold">Cancel</button>
@@ -238,8 +257,28 @@
         </div>
     </div>
 
-    <!-- App Logic -->
+    <!-- Script & SW -->
     <script>
+        // PWA Installation Handling
+        let deferredPrompt = null;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            const btn = document.getElementById('headerInstallBtn');
+            if (btn) btn.classList.remove('hidden');
+        });
+
+        async function triggerPwaInstall() {
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+                document.getElementById('headerInstallBtn').classList.add('hidden');
+            }
+            deferredPrompt = null;
+        }
+
+        // Service Worker
         if ('serviceWorker' in navigator) {
             const swCode = `
                 self.addEventListener('install', (e) => { self.skipWaiting(); });
@@ -288,7 +327,7 @@
             if (tabName === 'analytics') renderAnalytics();
         }
 
-        // --- BACKUP & RESTORE ---
+        // --- SETTINGS / BACKUP ---
         function openSettingsModal() {
             const backup = {
                 events: localStorage.getItem('ep_events'),
@@ -407,7 +446,6 @@
                 let isDue = false;
                 let reason = '';
 
-                // Target date check
                 if (ev.targetDate) {
                     const target = new Date(ev.targetDate);
                     if (todayDate >= target && evOccs.length === 0) {
@@ -416,7 +454,6 @@
                     }
                 }
 
-                // Frequency check
                 if (!isDue && ev.frequency !== 'As Needed') {
                     if (evOccs.length === 0) {
                         isDue = true;
@@ -506,14 +543,10 @@
 
         function openDayLogModal(dateStr) {
             if (events.length === 0) {
-                alert('Please create an event first.');
+                alert('Please create at least one event tracker first.');
                 return;
             }
-            document.getElementById('logEventId').value = events[0].id;
-            document.getElementById('logDate').value = dateStr;
-            document.getElementById('logNotes').value = '';
-            document.getElementById('logModalTitle').innerText = `Log Occurrence (${dateStr})`;
-            document.getElementById('logModal').classList.remove('hidden');
+            openLogModal(null, dateStr);
         }
 
         // --- HISTORY ---
@@ -656,12 +689,18 @@
             }
         }
 
-        function openLogModal(eventId) {
-            document.getElementById('logEventId').value = eventId;
-            document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
+        function openLogModal(defaultEventId = null, selectedDate = null) {
+            const select = document.getElementById('logEventSelect');
+            select.innerHTML = '';
+            events.forEach(ev => {
+                select.innerHTML += `<option value="${ev.id}">${ev.title} (${ev.category || 'General'})</option>`;
+            });
+
+            if (defaultEventId) select.value = defaultEventId;
+
+            document.getElementById('logDate').value = selectedDate || new Date().toISOString().split('T')[0];
             document.getElementById('logNotes').value = '';
-            const ev = events.find(e => e.id === eventId);
-            document.getElementById('logModalTitle').innerText = `Log Occurrence: ${ev ? ev.title : ''}`;
+            document.getElementById('logModalTitle').innerText = selectedDate ? `Log Occurrence (${selectedDate})` : 'Log Occurrence';
             document.getElementById('logModal').classList.remove('hidden');
         }
 
@@ -670,10 +709,14 @@
         }
 
         function submitOccurrenceLog() {
-            const eventId = Number(document.getElementById('logEventId').value);
+            const eventId = Number(document.getElementById('logEventSelect').value);
             const date = document.getElementById('logDate').value;
             const notes = document.getElementById('logNotes').value.trim();
 
+            if (!eventId) {
+                alert('Please select an event.');
+                return;
+            }
             if (!date) {
                 alert('Please select a date.');
                 return;
@@ -683,10 +726,12 @@
             saveData();
             closeLogModal();
             renderDashboard();
-            showToast('Occurrence logged with note!');
+            if (!document.getElementById('tab-calendar').classList.contains('hidden')) renderCalendar();
+            showToast('Occurrence logged for selected date! ⚡');
         }
 
         renderDashboard();
     </script>
 </body>
 </html>
+            

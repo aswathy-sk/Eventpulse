@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EventPulse Tracker</title>
     <!-- Web App Manifest for Full Native PWA Installation -->
-    <link rel="manifest" href="./manifest.json">
+    <link rel="manifest" href="manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -257,13 +257,8 @@
 
         // Service Worker
         if ('serviceWorker' in navigator) {
-            const swCode = `
-                self.addEventListener('install', (e) => { self.skipWaiting(); });
-                self.addEventListener('activate', (e) => { clients.claim(); });
-                self.addEventListener('fetch', (e) => { e.respondWith(fetch(e.request).catch(() => caches.match(e.request))); });
-            `;
-            const swBlob = new Blob([swCode], { type: 'text/javascript' });
-            navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(err => console.log('SW failed', err));
+            navigator.serviceWorker.register('./pwabuilder-sw.js')
+                .catch(error => console.error('Service worker registration failed:', error));
         }
 
         let events = JSON.parse(localStorage.getItem('ep_events')) || [
